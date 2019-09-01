@@ -12,13 +12,17 @@ import '../convert.dart';
 import '../globals.dart';
 import '../ios/xcodeproj.dart';
 import '../project.dart';
-import '../usage.dart';
+import '../reporting/reporting.dart';
+
 import 'cocoapod_utils.dart';
 
-/// Builds the macOS project through xcode build.
-// TODO(jonahwilliams): support target option.
+/// Builds the macOS project through xcodebuild.
 // TODO(jonahwilliams): refactor to share code with the existing iOS code.
-Future<void> buildMacOS(FlutterProject flutterProject, BuildInfo buildInfo) async {
+Future<void> buildMacOS({
+  FlutterProject flutterProject,
+  BuildInfo buildInfo,
+  String targetOverride,
+}) async {
   final Directory flutterBuildDir = fs.directory(getMacOSBuildDirectory());
   if (!flutterBuildDir.existsSync()) {
     flutterBuildDir.createSync(recursive: true);
@@ -27,29 +31,45 @@ Future<void> buildMacOS(FlutterProject flutterProject, BuildInfo buildInfo) asyn
   await updateGeneratedXcodeProperties(
     project: flutterProject,
     buildInfo: buildInfo,
+    targetOverride: targetOverride,
     useMacOSConfig: true,
     setSymroot: false,
   );
   await processPodsIfNeeded(flutterProject.macos, getMacOSBuildDirectory(), buildInfo.mode);
-
-  // Set debug or release mode.
-  String config = 'Debug';
-  if (buildInfo.isRelease) {
-    config = 'Release';
+  // If the xcfilelists do not exist, create empty version.
+  if (!flutterProject.macos.inputFileList.existsSync()) {
+     flutterProject.macos.inputFileList.createSync(recursive: true);
   }
-  // Run build script provided by application.
+  if (!flutterProject.macos.outputFileList.existsSync()) {
+    flutterProject.macos.outputFileList.createSync(recursive: true);
+  }
+
+  final Directory xcodeWorkspace = flutterProject.macos.xcodeWorkspace;
+
+  final XcodeProjectInfo projectInfo = await xcodeProjectInterpreter.getInfo(xcodeWorkspace.parent.path);
+  final String scheme = projectInfo.schemeFor(buildInfo);
+  if (scheme == null) {
+    throwToolExit('Unable to find expected scheme in Xcode project.');
+  }
+  final String configuration = projectInfo.buildConfigurationFor(buildInfo, scheme);
+  if (configuration == null) {
+    throwToolExit('Unable to find expected configuration in Xcode project.');
+  }
+
+  // Run the Xcode build.
   final Stopwatch sw = Stopwatch()..start();
   final Process process = await processManager.start(<String>[
     '/usr/bin/env',
     'xcrun',
     'xcodebuild',
-    '-workspace', flutterProject.macos.xcodeWorkspace.path,
-    '-configuration', '$config',
+    '-workspace', xcodeWorkspace.path,
+    '-configuration', '$configuration',
     '-scheme', 'Runner',
     '-derivedDataPath', flutterBuildDir.absolute.path,
     'OBJROOT=${fs.path.join(flutterBuildDir.absolute.path, 'Build', 'Intermediates.noindex')}',
     'SYMROOT=${fs.path.join(flutterBuildDir.absolute.path, 'Build', 'Products')}',
-  ], runInShell: true);
+    'COMPILER_INDEX_STORE_ENABLE=NO',
+  ]);
   final Status status = logger.startProgress(
     'Building macOS application...',
     timeout: null,

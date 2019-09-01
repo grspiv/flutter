@@ -20,7 +20,12 @@ import 'macos_workflow.dart';
 
 /// A device that represents a desktop MacOS target.
 class MacOSDevice extends Device {
-  MacOSDevice() : super('macOS');
+  MacOSDevice() : super(
+      'macOS',
+      category: Category.desktop,
+      platformType: PlatformType.macos,
+      ephemeral: false,
+  );
 
   @override
   void clearLogs() { }
@@ -50,6 +55,9 @@ class MacOSDevice extends Device {
   Future<bool> get isLocalEmulator async => false;
 
   @override
+  Future<String> get emulatorId async => null;
+
+  @override
   bool isSupported() => true;
 
   @override
@@ -69,13 +77,16 @@ class MacOSDevice extends Device {
     DebuggingOptions debuggingOptions,
     Map<String, dynamic> platformArgs,
     bool prebuiltApplication = false,
-    bool usesTerminalUi = true,
     bool ipv6 = false,
   }) async {
     // Stop any running applications with the same executable.
     if (!prebuiltApplication) {
       Cache.releaseLockEarly();
-      await buildMacOS(FlutterProject.current(), debuggingOptions?.buildInfo);
+      await buildMacOS(
+        flutterProject: FlutterProject.current(),
+        buildInfo: debuggingOptions?.buildInfo,
+        targetOverride: mainPath,
+      );
     }
 
     // Ensure that the executable is locatable.
@@ -86,6 +97,7 @@ class MacOSDevice extends Device {
     }
 
     // Make sure to call stop app after we've built.
+    _lastBuiltMode = debuggingOptions?.buildInfo?.mode;
     await stopApp(package);
     final Process process = await processManager.start(<String>[
       executable
@@ -114,8 +126,7 @@ class MacOSDevice extends Device {
   // currently we rely on killing the isolate taking down the application.
   @override
   Future<bool> stopApp(covariant MacOSApp app) async {
-    // Assume debug for now.
-    return killProcess(app.executable(BuildMode.debug));
+    return killProcess(app.executable(_lastBuiltMode));
   }
 
   @override
@@ -130,6 +141,9 @@ class MacOSDevice extends Device {
   bool isSupportedForProject(FlutterProject flutterProject) {
     return flutterProject.macos.existsSync();
   }
+
+  // Track the last built mode from startApp.
+  BuildMode _lastBuiltMode;
 }
 
 class MacOSDevices extends PollingDeviceDiscovery {

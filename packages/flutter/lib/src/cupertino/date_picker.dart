@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:math' as math;
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -66,14 +68,25 @@ class _DatePickerLayoutDelegate extends MultiChildLayoutDelegate {
       if (index == 0 || index == columnWidths.length - 1)
         childWidth += remainingWidth / 2;
 
-      assert(
-        childWidth >= 0,
-        'Insufficient horizontal space to render the CupertinoDatePicker '
-        'because the parent is too narrow at ${size.width}px.\n'
-        'An additional ${-remainingWidth}px is needed to avoid overlapping '
-        'columns.',
-      );
-      layoutChild(index, BoxConstraints.tight(Size(childWidth, size.height)));
+      // We can't actually assert here because it would break things badly for
+      // semantics, which will expect that we laid things out here.
+      assert(() {
+        if (childWidth < 0) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: FlutterError(
+                'Insufficient horizontal space to render the '
+                'CupertinoDatePicker because the parent is too narrow at '
+                '${size.width}px.\n'
+                'An additional ${-remainingWidth}px is needed to avoid '
+                'overlapping columns.',
+              ),
+            ),
+          );
+        }
+        return true;
+      }());
+      layoutChild(index, BoxConstraints.tight(Size(math.max(0.0, childWidth), size.height)));
       positionChild(index, Offset(currentHorizontalOffset, 0.0));
 
       currentHorizontalOffset += childWidth;
@@ -197,10 +210,12 @@ class CupertinoDatePicker extends StatefulWidget {
     this.maximumYear,
     this.minuteInterval = 1,
     this.use24hFormat = false,
+    this.backgroundColor = _kBackgroundColor
   }) : initialDateTime = initialDateTime ?? DateTime.now(),
        assert(mode != null),
        assert(onDateTimeChanged != null),
        assert(minimumYear != null),
+       assert(backgroundColor != null),
        assert(
          minuteInterval > 0 && 60 % minuteInterval == 0,
          'minute interval is not a positive integer factor of 60',
@@ -267,6 +282,11 @@ class CupertinoDatePicker extends StatefulWidget {
   /// Callback called when the selected date and/or time changes. Must not be
   /// null.
   final ValueChanged<DateTime> onDateTimeChanged;
+
+  /// Background color of date picker.
+  ///
+  /// Defaults to [CupertinoColors.white] when null.
+  final Color backgroundColor;
 
   @override
   State<StatefulWidget> createState() {
@@ -487,7 +507,7 @@ class _CupertinoDatePickerDateTimeState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         selectedDayFromInitial = index;
@@ -532,7 +552,7 @@ class _CupertinoDatePickerDateTimeState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         if (widget.use24hFormat) {
@@ -586,7 +606,7 @@ class _CupertinoDatePickerDateTimeState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         selectedMinute = index * widget.minuteInterval;
@@ -614,7 +634,7 @@ class _CupertinoDatePickerDateTimeState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         selectedAmPm = index;
@@ -779,7 +799,7 @@ class _CupertinoDatePickerDateState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         selectedDay = index + 1;
@@ -810,7 +830,7 @@ class _CupertinoDatePickerDateState extends State<CupertinoDatePicker> {
       itemExtent: _kItemExtent,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         selectedMonth = index + 1;
@@ -837,7 +857,7 @@ class _CupertinoDatePickerDateState extends State<CupertinoDatePicker> {
       offAxisFraction: offAxisFraction,
       useMagnifier: _kUseMagnifier,
       magnification: _kMagnification,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       onSelectedItemChanged: (int index) {
         selectedYear = index;
         if (DateTime(selectedYear, selectedMonth, selectedDay).day == selectedDay)
@@ -1038,6 +1058,7 @@ class CupertinoTimerPicker extends StatefulWidget {
     this.initialTimerDuration = Duration.zero,
     this.minuteInterval = 1,
     this.secondInterval = 1,
+    this.backgroundColor = _kBackgroundColor,
     @required this.onTimerDurationChanged,
   }) : assert(mode != null),
        assert(onTimerDurationChanged != null),
@@ -1046,7 +1067,8 @@ class CupertinoTimerPicker extends StatefulWidget {
        assert(minuteInterval > 0 && 60 % minuteInterval == 0),
        assert(secondInterval > 0 && 60 % secondInterval == 0),
        assert(initialTimerDuration.inMinutes % minuteInterval == 0),
-       assert(initialTimerDuration.inSeconds % secondInterval == 0);
+       assert(initialTimerDuration.inSeconds % secondInterval == 0),
+       assert(backgroundColor != null);
 
   /// The mode of the timer picker.
   final CupertinoTimerPickerMode mode;
@@ -1064,6 +1086,11 @@ class CupertinoTimerPicker extends StatefulWidget {
 
   /// Callback called when the timer duration changes.
   final ValueChanged<Duration> onTimerDurationChanged;
+
+  /// Background color of timer picker.
+  ///
+  /// Defaults to [CupertinoColors.white] when null.
+  final Color backgroundColor;
 
   @override
   State<StatefulWidget> createState() => _CupertinoTimerPickerState();
@@ -1121,7 +1148,7 @@ class _CupertinoTimerPickerState extends State<CupertinoTimerPicker> {
       scrollController: FixedExtentScrollController(initialItem: selectedHour),
       offAxisFraction: -0.5 * textDirectionFactor,
       itemExtent: _kItemExtent,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         setState(() {
@@ -1200,7 +1227,7 @@ class _CupertinoTimerPickerState extends State<CupertinoTimerPicker> {
       ),
       offAxisFraction: offAxisFraction,
       itemExtent: _kItemExtent,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         setState(() {
@@ -1313,7 +1340,7 @@ class _CupertinoTimerPickerState extends State<CupertinoTimerPicker> {
       ),
       offAxisFraction: offAxisFraction,
       itemExtent: _kItemExtent,
-      backgroundColor: _kBackgroundColor,
+      backgroundColor: widget.backgroundColor,
       squeeze: _kSqueeze,
       onSelectedItemChanged: (int index) {
         setState(() {

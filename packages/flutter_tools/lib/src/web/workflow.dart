@@ -6,16 +6,8 @@ import '../base/context.dart';
 import '../base/platform.dart';
 import '../base/process_manager.dart';
 import '../doctor.dart';
-import '../version.dart';
+import '../features.dart';
 import 'chrome.dart';
-
-/// Only launch or display web devices if `FLUTTER_WEB`
-/// environment variable is set to true.
-bool get flutterWebEnabled {
-  _flutterWebEnabled = platform.environment['FLUTTER_WEB']?.toLowerCase() == 'true';
-  return _flutterWebEnabled && !FlutterVersion.instance.isStable;
-}
-bool _flutterWebEnabled;
 
 /// The  web workflow instance.
 WebWorkflow get webWorkflow => context.get<WebWorkflow>();
@@ -24,13 +16,13 @@ class WebWorkflow extends Workflow {
   const WebWorkflow();
 
   @override
-  bool get appliesToHostPlatform => flutterWebEnabled && (platform.isWindows || platform.isMacOS || platform.isLinux);
+  bool get appliesToHostPlatform => featureFlags.isWebEnabled && (platform.isWindows || platform.isMacOS || platform.isLinux);
 
   @override
-  bool get canLaunchDevices => flutterWebEnabled && canFindChrome();
+  bool get canLaunchDevices => featureFlags.isWebEnabled && canFindChrome();
 
   @override
-  bool get canListDevices => flutterWebEnabled && canFindChrome();
+  bool get canListDevices => featureFlags.isWebEnabled && canFindChrome();
 
   @override
   bool get canListEmulators => false;

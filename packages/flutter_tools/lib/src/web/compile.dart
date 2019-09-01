@@ -13,7 +13,7 @@ import '../build_info.dart';
 import '../bundle.dart';
 import '../globals.dart';
 import '../project.dart';
-import '../usage.dart';
+import '../reporting/reporting.dart';
 
 /// The [WebCompilationProxy] instance.
 WebCompilationProxy get webCompilationProxy => context.get<WebCompilationProxy>();
@@ -30,8 +30,7 @@ Future<void> buildWeb(FlutterProject flutterProject, String target, BuildInfo bu
   try {
     result = await webCompilationProxy.initialize(
       projectDirectory: FlutterProject.current().directory,
-      targets: <String>[target],
-      release: buildInfo.isRelease,
+      mode: buildInfo.mode,
     );
     if (result) {
       // Places assets adjacent to the web stuff.
@@ -79,13 +78,10 @@ class WebCompilationProxy {
   ///
   /// `release` controls whether we build the bundle for dartdevc or only
   /// the entrypoints for dart2js to later take over.
-  ///
-  /// `targets` controls the specific compiler targets.
   Future<bool> initialize({
     @required Directory projectDirectory,
-    @required List<String> targets,
     String testOutputDir,
-    bool release,
+    BuildMode mode,
   }) async {
     throw UnimplementedError();
   }

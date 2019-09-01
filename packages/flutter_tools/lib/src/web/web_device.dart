@@ -11,9 +11,10 @@ import '../base/platform.dart';
 import '../base/process_manager.dart';
 import '../build_info.dart';
 import '../device.dart';
+import '../features.dart';
 import '../project.dart';
-import '../web/workflow.dart';
 import 'chrome.dart';
+import 'workflow.dart';
 
 class WebApplicationPackage extends ApplicationPackage {
   WebApplicationPackage(this.flutterProject) : super(id: flutterProject.manifest.appName);
@@ -27,9 +28,16 @@ class WebApplicationPackage extends ApplicationPackage {
   Directory get webSourcePath => flutterProject.directory.childDirectory('web');
 }
 
-class WebDevice extends Device {
-  WebDevice() : super('web');
+class ChromeDevice extends Device {
+  ChromeDevice() : super(
+      'chrome',
+      category: Category.web,
+      platformType: PlatformType.web,
+      ephemeral: false,
+  );
 
+  // TODO(jonahwilliams): this is technically false, but requires some refactoring
+  // to allow hot mode restart only devices.
   @override
   bool get supportsHotReload => true;
 
@@ -66,10 +74,13 @@ class WebDevice extends Device {
   Future<bool> get isLocalEmulator async => false;
 
   @override
-  bool isSupported() => flutterWebEnabled && canFindChrome();
+  Future<String> get emulatorId async => null;
 
   @override
-  String get name => 'web';
+  bool isSupported() =>  featureFlags.isWebEnabled && canFindChrome();
+
+  @override
+  String get name => 'Chrome';
 
   @override
   DevicePortForwarder get portForwarder => const NoOpDevicePortForwarder();
@@ -112,7 +123,6 @@ class WebDevice extends Device {
     DebuggingOptions debuggingOptions,
     Map<String, Object> platformArgs,
     bool prebuiltApplication = false,
-    bool usesTerminalUi = true,
     bool ipv6 = false,
   }) async {
     // See [ResidentWebRunner.run] in flutter_tools/lib/src/resident_web_runner.dart
@@ -138,12 +148,12 @@ class WebDevice extends Device {
 }
 
 class WebDevices extends PollingDeviceDiscovery {
-  WebDevices() : super('web');
+  WebDevices() : super('chrome');
 
-  final WebDevice _webDevice = WebDevice();
+  final ChromeDevice _webDevice = ChromeDevice();
 
   @override
-  bool get canListAnything => flutterWebEnabled;
+  bool get canListAnything => featureFlags.isWebEnabled;
 
   @override
   Future<List<Device>> pollingGetDevices() async {
@@ -153,7 +163,7 @@ class WebDevices extends PollingDeviceDiscovery {
   }
 
   @override
-  bool get supportsPlatform => flutterWebEnabled;
+  bool get supportsPlatform =>  featureFlags.isWebEnabled;
 }
 
 @visibleForTesting

@@ -14,7 +14,6 @@ class BuildInfo {
     this.mode,
     this.flavor, {
     this.trackWidgetCreation = false,
-    this.compilationTraceFilePath,
     this.extraFrontEndOptions,
     this.extraGenSnapshotOptions,
     this.fileSystemRoots,
@@ -39,9 +38,6 @@ class BuildInfo {
   /// Whether the build should track widget creation locations.
   final bool trackWidgetCreation;
 
-  /// Dart compilation trace file to use for JIT VM snapshot.
-  final String compilationTraceFilePath;
-
   /// Extra command-line options for front-end.
   final String extraFrontEndOptions;
 
@@ -64,8 +60,6 @@ class BuildInfo {
   static const BuildInfo debug = BuildInfo(BuildMode.debug, null);
   static const BuildInfo profile = BuildInfo(BuildMode.profile, null);
   static const BuildInfo release = BuildInfo(BuildMode.release, null);
-  static const BuildInfo dynamicProfile = BuildInfo(BuildMode.dynamicProfile, null);
-  static const BuildInfo dynamicRelease = BuildInfo(BuildMode.dynamicRelease, null);
 
   /// Returns whether a debug build is requested.
   ///
@@ -75,15 +69,12 @@ class BuildInfo {
   /// Returns whether a profile build is requested.
   ///
   /// Exactly one of [isDebug], [isProfile], or [isRelease] is true.
-  bool get isProfile => mode == BuildMode.profile || mode == BuildMode.dynamicProfile;
+  bool get isProfile => mode == BuildMode.profile;
 
   /// Returns whether a release build is requested.
   ///
   /// Exactly one of [isDebug], [isProfile], or [isRelease] is true.
-  bool get isRelease => mode == BuildMode.release || mode == BuildMode.dynamicRelease;
-
-  /// Returns whether a dynamic build is requested.
-  bool get isDynamic => mode == BuildMode.dynamicProfile || mode == BuildMode.dynamicRelease;
+  bool get isRelease => mode == BuildMode.release;
 
   bool get usesAot => isAotBuildMode(mode);
   bool get supportsEmulator => isEmulatorBuildMode(mode);
@@ -122,8 +113,30 @@ enum BuildMode {
   debug,
   profile,
   release,
-  dynamicProfile,
-  dynamicRelease
+}
+
+const List<String> _kBuildModes = <String>[
+  'debug',
+  'profile',
+  'release',
+];
+
+/// Return the name for the build mode, or "any" if null.
+String getNameForBuildMode(BuildMode buildMode) {
+  return _kBuildModes[buildMode.index];
+}
+
+/// Returns the [BuildMode] for a particular `name`.
+BuildMode getBuildModeForName(String name) {
+  switch (name) {
+    case 'debug':
+      return BuildMode.debug;
+    case 'profile':
+      return BuildMode.profile;
+    case 'release':
+      return BuildMode.release;
+  }
+  return null;
 }
 
 String validatedBuildNumberForPlatform(TargetPlatform targetPlatform, String buildNumber) {
@@ -216,9 +229,7 @@ bool isAotBuildMode(BuildMode mode) {
 
 // Returns true if the given build mode can be used on emulators / simulators.
 bool isEmulatorBuildMode(BuildMode mode) {
-  return mode == BuildMode.debug ||
-    mode == BuildMode.dynamicRelease ||
-    mode == BuildMode.dynamicProfile;
+  return mode == BuildMode.debug;
 }
 
 enum HostPlatform {
@@ -254,12 +265,13 @@ enum TargetPlatform {
   web_javascript,
 }
 
-/// iOS target device architecture.
+/// iOS and macOS target device architecture.
 //
 // TODO(cbracken): split TargetPlatform.ios into ios_armv7, ios_arm64.
-enum IOSArch {
+enum DarwinArch {
   armv7,
   arm64,
+  x86_64,
 }
 
 enum AndroidArch {
@@ -270,27 +282,29 @@ enum AndroidArch {
 }
 
 /// The default set of iOS device architectures to build for.
-const List<IOSArch> defaultIOSArchs = <IOSArch>[
-  IOSArch.arm64,
+const List<DarwinArch> defaultIOSArchs = <DarwinArch>[
+  DarwinArch.arm64,
 ];
 
-String getNameForIOSArch(IOSArch arch) {
+String getNameForDarwinArch(DarwinArch arch) {
   switch (arch) {
-    case IOSArch.armv7:
+    case DarwinArch.armv7:
       return 'armv7';
-    case IOSArch.arm64:
+    case DarwinArch.arm64:
       return 'arm64';
+    case DarwinArch.x86_64:
+      return 'x86_64';
   }
   assert(false);
   return null;
 }
 
-IOSArch getIOSArchForName(String arch) {
+DarwinArch getIOSArchForName(String arch) {
   switch (arch) {
     case 'armv7':
-      return IOSArch.armv7;
+      return DarwinArch.armv7;
     case 'arm64':
-      return IOSArch.arm64;
+      return DarwinArch.arm64;
   }
   assert(false);
   return null;
@@ -467,10 +481,4 @@ String getWindowsBuildDirectory() {
 /// Returns the Fuchsia build output directory.
 String getFuchsiaBuildDirectory() {
   return fs.path.join(getBuildDirectory(), 'fuchsia');
-}
-
-/// Returns directory used by incremental compiler (IKG - incremental kernel
-/// generator) to store cached intermediate state.
-String getIncrementalCompilerByteStoreDirectory() {
-  return fs.path.join(getBuildDirectory(), 'ikg_byte_store');
 }

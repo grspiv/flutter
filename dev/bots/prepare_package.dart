@@ -381,14 +381,14 @@ class ArchiveCreator {
 
   Future<String> _runFlutter(List<String> args, {Directory workingDirectory}) {
     return _processRunner.runProcess(
-      <String>[_flutter]..addAll(args),
+      <String>[_flutter, ...args],
       workingDirectory: workingDirectory ?? flutterRoot,
     );
   }
 
   Future<String> _runGit(List<String> args, {Directory workingDirectory}) {
     return _processRunner.runProcess(
-      <String>['git']..addAll(args),
+      <String>['git', ...args],
       workingDirectory: workingDirectory ?? flutterRoot,
     );
   }
@@ -414,9 +414,14 @@ class ArchiveCreator {
   }
 
   /// Create a zip archive from the directory source.
-  Future<String> _createZipArchive(File output, Directory source) {
+  Future<String> _createZipArchive(File output, Directory source) async {
     List<String> commandLine;
     if (platform.isWindows) {
+      // Unhide the .git folder, https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/attrib.
+      await _processRunner.runProcess(
+        <String>['attrib', '-h', '.git'],
+        workingDirectory: Directory(source.absolute.path),
+      );
       commandLine = <String>[
         '7za',
         'a',
@@ -574,14 +579,14 @@ class ArchivePublisher {
   }) async {
     if (platform.isWindows) {
       return _processRunner.runProcess(
-        <String>['python', path.join(platform.environment['DEPOT_TOOLS'], 'gsutil.py'), '--']..addAll(args),
+        <String>['python', path.join(platform.environment['DEPOT_TOOLS'], 'gsutil.py'), '--', ...args],
         workingDirectory: workingDirectory,
         failOk: failOk,
       );
     }
 
     return _processRunner.runProcess(
-      <String>['gsutil.py', '--']..addAll(args),
+      <String>['gsutil.py', '--', ...args],
       workingDirectory: workingDirectory,
       failOk: failOk,
     );
@@ -601,14 +606,14 @@ class ArchivePublisher {
     if (dest.endsWith('.json')) {
       mimeType = 'application/json';
     }
-    final List<String> args = <String>[];
-    // Use our preferred MIME type for the files we care about
-    // and let gsutil figure it out for anything else.
-    if (mimeType != null) {
-      args.addAll(<String>['-h', 'Content-Type:$mimeType']);
-    }
-    args.addAll(<String>['cp', src, dest]);
-    return await _runGsUtil(args);
+    return await _runGsUtil(<String>[
+      // Use our preferred MIME type for the files we care about
+      // and let gsutil figure it out for anything else.
+      if (mimeType != null) ...<String>['-h', 'Content-Type:$mimeType'],
+      'cp',
+      src,
+      dest,
+    ]);
   }
 }
 

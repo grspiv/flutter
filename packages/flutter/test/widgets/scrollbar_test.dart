@@ -113,16 +113,17 @@ void main() {
         scrollMetrics: defaultMetrics,
       );
 
-      final List<ScrollMetrics> metricsList =
-        <ScrollMetrics> [startingMetrics.copyWith(pixels: 0.01)]
-        ..addAll(List<ScrollMetrics>.generate(
-            (maxExtent/viewportDimension).round(),
-            (int index) => startingMetrics.copyWith(pixels: (index + 1) * viewportDimension),
-          ).where((ScrollMetrics metrics) => !metrics.outOfRange))
-        ..add(startingMetrics.copyWith(pixels: maxExtent - 0.01));
+      final List<ScrollMetrics> metricsList = <ScrollMetrics> [
+        startingMetrics.copyWith(pixels: 0.01),
+        ...List<ScrollMetrics>.generate(
+          (maxExtent / viewportDimension).round(),
+          (int index) => startingMetrics.copyWith(pixels: (index + 1) * viewportDimension),
+        ).where((ScrollMetrics metrics) => !metrics.outOfRange),
+        startingMetrics.copyWith(pixels: maxExtent - 0.01),
+      ];
 
       double lastCoefficient;
-      for(ScrollMetrics metrics in metricsList) {
+      for (ScrollMetrics metrics in metricsList) {
         painter.update(metrics, metrics.axisDirection);
         painter.paint(testCanvas, size);
 
@@ -368,6 +369,77 @@ void main() {
       expect(size.height - rect1.bottom, padding.bottom);
       expect(rect1.left, padding.left);
     });
+  });
+
+  testWidgets('thumb resizes gradually on overscroll', (WidgetTester tester) async {
+    const EdgeInsets padding = EdgeInsets.fromLTRB(1, 2, 3, 4);
+    const Size size = Size(60, 300);
+    final double scrollExtent = size.height * 10;
+    final ScrollMetrics metrics = defaultMetrics.copyWith(
+      minScrollExtent: 0,
+      maxScrollExtent: scrollExtent,
+      axisDirection: AxisDirection.down,
+      viewportDimension: size.height,
+    );
+
+    const double minOverscrollLength = 8.0;
+    final ScrollbarPainter p = _buildPainter(
+      padding: padding,
+      scrollMetrics: metrics,
+      minLength: 36.0,
+      minOverscrollLength: 8.0,
+    );
+
+    // No overscroll gives a full sized thumb.
+    p.update(
+      metrics.copyWith(
+        pixels: 0.0,
+      ),
+      AxisDirection.down,
+    );
+    p.paint(testCanvas, size);
+    final double fullThumbExtent = captureRect().height;
+    expect(fullThumbExtent, greaterThan(_kMinThumbExtent));
+
+    // Scrolling to the middle also gives a full sized thumb.
+    p.update(
+      metrics.copyWith(
+        pixels: scrollExtent / 2,
+      ),
+      AxisDirection.down,
+    );
+    p.paint(testCanvas, size);
+    expect(captureRect().height, closeTo(fullThumbExtent, .000001));
+
+    // Scrolling just to the very end also gives a full sized thumb.
+    p.update(
+      metrics.copyWith(
+        pixels: scrollExtent,
+      ),
+      AxisDirection.down,
+    );
+    p.paint(testCanvas, size);
+    expect(captureRect().height, closeTo(fullThumbExtent, .000001));
+
+    // Scrolling just past the end shrinks the thumb slightly.
+    p.update(
+      metrics.copyWith(
+        pixels: scrollExtent * 1.001,
+      ),
+      AxisDirection.down,
+    );
+    p.paint(testCanvas, size);
+    expect(captureRect().height, closeTo(fullThumbExtent, 2.0));
+
+    // Scrolling way past the end shrinks the thumb to minimum.
+    p.update(
+      metrics.copyWith(
+        pixels: double.infinity,
+      ),
+      AxisDirection.down,
+    );
+    p.paint(testCanvas, size);
+    expect(captureRect().height, minOverscrollLength);
   });
 
   test('should scroll towards the right direction',

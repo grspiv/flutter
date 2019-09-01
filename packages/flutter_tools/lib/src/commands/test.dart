@@ -21,6 +21,7 @@ import '../test/coverage_collector.dart';
 import '../test/event_printer.dart';
 import '../test/runner.dart';
 import '../test/watcher.dart';
+
 class TestCommand extends FastFlutterCommand {
   TestCommand({ bool verboseHelp = false }) {
     requiresPubspecYaml();
@@ -41,7 +42,7 @@ class TestCommand extends FastFlutterCommand {
         negatable: false,
         help: 'Start in a paused mode and wait for a debugger to connect.\n'
               'You must specify a single test file to run, explicitly.\n'
-              'Instructions for connecting with a debugger and printed to the '
+              'Instructions for connecting with a debugger are printed to the '
               'console once the test has started.',
       )
       ..addFlag('disable-service-auth-codes',
@@ -77,12 +78,6 @@ class TestCommand extends FastFlutterCommand {
         help: 'Handle machine structured JSON command input\n'
               'and provide output and progress in machine friendly format.',
       )
-      ..addFlag('track-widget-creation',
-        negatable: false,
-        hide: !verboseHelp,
-        help: 'Track widget creation locations.\n'
-              'This enables testing of features such as the widget inspector.',
-      )
       ..addFlag('update-goldens',
         negatable: false,
         help: 'Whether matchesGoldenFile() calls within your test methods should '
@@ -105,13 +100,19 @@ class TestCommand extends FastFlutterCommand {
         defaultsTo: 'tester',
         help: 'The platform to run the unit tests on. Defaults to "tester".'
       );
+    usesTrackWidgetCreation(verboseHelp: verboseHelp);
   }
 
   @override
-  Future<Set<DevelopmentArtifact>> get requiredArtifacts async => <DevelopmentArtifact>{
-    DevelopmentArtifact.universal,
-    DevelopmentArtifact.web,
-  };
+  Future<Set<DevelopmentArtifact>> get requiredArtifacts async {
+    final Set<DevelopmentArtifact> results = <DevelopmentArtifact>{
+      DevelopmentArtifact.universal,
+    };
+    if (argResults['platform'] == 'chrome') {
+      results.add(DevelopmentArtifact.web);
+    }
+    return results;
+  }
 
   @override
   String get name => 'test';
@@ -173,21 +174,20 @@ class TestCommand extends FastFlutterCommand {
         );
       }
     } else {
-      final List<String> fileCopy = <String>[];
-      for (String file in files) {
-        if (file.endsWith(platform.pathSeparator)) {
-          fileCopy.addAll(_findTests(fs.directory(file)));
-        } else {
-          fileCopy.add(file);
-        }
-      }
-      files = fileCopy;
+      files = <String>[
+        for (String path in files)
+          if (fs.isDirectorySync(path))
+            ..._findTests(fs.directory(path))
+          else
+            path
+      ];
     }
 
     CoverageCollector collector;
     if (argResults['coverage'] || argResults['merge-coverage']) {
+      final String projectName = FlutterProject.current().manifest.appName;
       collector = CoverageCollector(
-        flutterProject: FlutterProject.current(),
+        libraryPredicate: (String libraryName) => libraryName.contains(projectName),
       );
     }
 
@@ -263,6 +263,7 @@ class TestCommand extends FastFlutterCommand {
           assetBundle.entries);
     }
   }
+
   bool _needRebuild(Map<String, DevFSContent> entries) {
     final File manifest = fs.file(fs.path.join('build', 'unit_test_assets', 'AssetManifest.json'));
     if (!manifest.existsSync()) {

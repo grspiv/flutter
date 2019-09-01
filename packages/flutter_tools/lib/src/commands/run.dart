@@ -8,29 +8,29 @@ import 'package:args/command_runner.dart';
 
 import '../base/common.dart';
 import '../base/file_system.dart';
+import '../base/terminal.dart';
 import '../base/time.dart';
 import '../base/utils.dart';
 import '../build_info.dart';
 import '../cache.dart';
 import '../device.dart';
+import '../features.dart';
 import '../globals.dart';
-import '../macos/xcode.dart';
 import '../project.dart';
+import '../reporting/reporting.dart';
 import '../resident_runner.dart';
-import '../resident_web_runner.dart';
 import '../run_cold.dart';
 import '../run_hot.dart';
 import '../runner/flutter_command.dart';
 import '../tracing.dart';
-import '../usage.dart';
 import '../version.dart';
+import '../web/web_runner.dart';
 import 'daemon.dart';
 
 abstract class RunCommandBase extends FlutterCommand with DeviceBasedDevelopmentArtifacts {
   // Used by run and drive commands.
   RunCommandBase({ bool verboseHelp = false }) {
     addBuildModeFlags(defaultToRelease: false, verboseHelp: verboseHelp);
-    addDynamicModeFlags(verboseHelp: verboseHelp);
     usesFlavorOption();
     argParser
       ..addFlag('trace-startup',
@@ -43,28 +43,12 @@ abstract class RunCommandBase extends FlutterCommand with DeviceBasedDevelopment
       )
       ..addOption('route',
         help: 'Which route to load when running the app.',
-      )
-      ..addFlag('train',
-        hide: !verboseHelp,
-        negatable: false,
-        help: 'Save Dart runtime compilation trace to a file. '
-              'Compilation trace will be saved to a file specified by --compilation-trace-file '
-              'when \'flutter run --dynamic --profile --train\' exits. '
-              'This file contains a list of Dart symbols that were compiled by the runtime JIT '
-              'compiler up to that point. This file can be used in subsequent --dynamic builds '
-              'to precompile some code by the offline compiler. '
-              'This flag is only allowed when running as --dynamic --profile (recommended) or '
-              '--debug (may include unwanted debug symbols).',
-      )
-      ..addOption('target-platform',
-        defaultsTo: 'default',
-        allowed: <String>['default', 'android-arm', 'android-arm64', 'android-x86', 'android-x64'],
-        help: 'Specify the target platform when building the app for an '
-              'Android device.\nIgnored on iOS.');
+      );
     usesTargetOption();
     usesPortOptions();
     usesIpv6Flag();
     usesPubOption();
+    usesTrackWidgetCreation(verboseHelp: verboseHelp);
     usesIsolateFilterOption(hide: !verboseHelp);
   }
 
@@ -77,7 +61,6 @@ class RunCommand extends RunCommandBase {
   RunCommand({ bool verboseHelp = false }) : super(verboseHelp: verboseHelp) {
     requiresPubspecYaml();
     usesFilesystemOptions(hide: !verboseHelp);
-
     argParser
       ..addFlag('start-paused',
         negatable: false,
@@ -145,10 +128,6 @@ class RunCommand extends RunCommandBase {
       ..addOption('use-application-binary',
         hide: !verboseHelp,
         help: 'Specify a pre-built application binary to use when running.',
-      )
-      ..addFlag('track-widget-creation',
-        hide: !verboseHelp,
-        help: 'Track widget creation locations.',
       )
       ..addOption('project-root',
         hide: !verboseHelp,
@@ -218,15 +197,22 @@ class RunCommand extends RunCommandBase {
   }
 
   @override
-  Future<Map<String, String>> get usageValues async {
-    final bool isEmulator = await devices[0].isLocalEmulator;
+  Future<Map<CustomDimensions, String>> get usageValues async {
     String deviceType, deviceOsVersion;
-    if (devices.length == 1) {
+    bool isEmulator;
+
+    if (devices == null || devices.isEmpty) {
+      deviceType = 'none';
+      deviceOsVersion = 'none';
+      isEmulator = false;
+    } else if (devices.length == 1) {
       deviceType = getNameForTargetPlatform(await devices[0].targetPlatform);
       deviceOsVersion = await devices[0].sdkNameAndVersion;
+      isEmulator = await devices[0].isLocalEmulator;
     } else {
       deviceType = 'multiple';
       deviceOsVersion = 'multiple';
+      isEmulator = false;
     }
     final String modeName = getBuildInfo().modeName;
     final AndroidProject androidProject = FlutterProject.current().android;
@@ -240,27 +226,14 @@ class RunCommand extends RunCommandBase {
       hostLanguage.add(iosProject.isSwift ? 'swift' : 'objc');
     }
 
-    return <String, String>{
-      kCommandRunIsEmulator: '$isEmulator',
-      kCommandRunTargetName: deviceType,
-      kCommandRunTargetOsVersion: deviceOsVersion,
-      kCommandRunModeName: modeName,
-      kCommandRunProjectModule: '${FlutterProject.current().isModule}',
-      kCommandRunProjectHostLanguage: hostLanguage.join(','),
+    return <CustomDimensions, String>{
+      CustomDimensions.commandRunIsEmulator: '$isEmulator',
+      CustomDimensions.commandRunTargetName: deviceType,
+      CustomDimensions.commandRunTargetOsVersion: deviceOsVersion,
+      CustomDimensions.commandRunModeName: modeName,
+      CustomDimensions.commandRunProjectModule: '${FlutterProject.current().isModule}',
+      CustomDimensions.commandRunProjectHostLanguage: hostLanguage.join(','),
     };
-  }
-
-  @override
-  void printNoConnectedDevices() {
-    super.printNoConnectedDevices();
-    if (getCurrentHostPlatform() == HostPlatform.darwin_x64 &&
-        xcode.isInstalledAndMeetsVersionCheck) {
-      printStatus('');
-      printStatus("Run 'flutter emulators' to list and start any available device emulators.");
-      printStatus('');
-      printStatus('If you expected your device to be detected, please run "flutter doctor" to diagnose');
-      printStatus('potential issues, or visit https://flutter.dev/setup/ for troubleshooting tips.');
-    }
   }
 
   @override
@@ -362,8 +335,9 @@ class RunCommand extends RunCommandBase {
         endTimeOverride: appStartedTime,
       );
     }
+    terminal.usesTerminalUi = true;
 
-    if (argResults['dart-flags'] != null && FlutterVersion.instance.isStable) {
+    if (argResults['dart-flags'] != null && !FlutterVersion.instance.isMaster) {
       throw UsageException('--dart-flags is not available on the stable '
                            'channel.', null);
     }
@@ -398,11 +372,6 @@ class RunCommand extends RunCommandBase {
       }
     }
 
-    if (argResults['train'] &&
-        getBuildMode() != BuildMode.debug && getBuildMode() != BuildMode.dynamicProfile)
-      throwToolExit('Error: --train is only allowed when running as --dynamic --profile '
-          '(recommended) or --debug (may include unwanted debug symbols).');
-
     List<String> expFlags;
     if (argParser.options.containsKey(FlutterOptions.kEnableExperiment) &&
         argResults[FlutterOptions.kEnableExperiment].isNotEmpty) {
@@ -415,7 +384,6 @@ class RunCommand extends RunCommandBase {
         device,
         flutterProject: flutterProject,
         trackWidgetCreation: argResults['track-widget-creation'],
-        dillOutputPath: argResults['output-dill'],
         fileSystemRoots: argResults['filesystem-root'],
         fileSystemScheme: argResults['filesystem-scheme'],
         viewFilter: argResults['isolate-filter'],
@@ -425,11 +393,11 @@ class RunCommand extends RunCommandBase {
       );
       flutterDevices.add(flutterDevice);
     }
-    // Only support "web mode" on non-stable branches with a single web device
-    // in a "hot mode".
-    final bool webMode = !FlutterVersion.instance.isStable
-      && devices.length == 1
-      && await devices.single.targetPlatform == TargetPlatform.web_javascript;
+    // Only support "web mode" with a single web device due to resident runner
+    // refactoring required otherwise.
+    final bool webMode = featureFlags.isWebEnabled &&
+                         devices.length == 1  &&
+                         await devices.single.targetPlatform == TargetPlatform.web_javascript;
 
     ResidentRunner runner;
     final String applicationBinaryPath = argResults['use-application-binary'];
@@ -445,13 +413,12 @@ class RunCommand extends RunCommandBase {
         projectRootPath: argResults['project-root'],
         packagesFilePath: globalResults['packages'],
         dillOutputPath: argResults['output-dill'],
-        saveCompilationTrace: argResults['train'],
         stayResident: stayResident,
         ipv6: ipv6,
       );
     } else if (webMode) {
-      runner = ResidentWebRunner(
-        flutterDevices,
+      runner = webRunnerFactory.createWebRunner(
+        devices.single,
         target: targetFile,
         flutterProject: flutterProject,
         ipv6: ipv6,
@@ -467,9 +434,8 @@ class RunCommand extends RunCommandBase {
         applicationBinary: applicationBinaryPath == null
             ? null
             : fs.file(applicationBinaryPath),
-        saveCompilationTrace: argResults['train'],
-        stayResident: stayResident,
         ipv6: ipv6,
+        stayResident: stayResident,
       );
     }
 
@@ -481,16 +447,23 @@ class RunCommand extends RunCommandBase {
     final Completer<void> appStartedTimeRecorder = Completer<void>.sync();
     // This callback can't throw.
     unawaited(appStartedTimeRecorder.future.then<void>(
-      (_) { appStartedTime = systemClock.now(); }
+      (_) {
+        appStartedTime = systemClock.now();
+        if (stayResident) {
+          TerminalHandler(runner)
+            ..setupTerminal()
+            ..registerSignalHandlers();
+        }
+      }
     ));
 
     final int result = await runner.run(
       appStartedCompleter: appStartedTimeRecorder,
       route: route,
-      shouldBuild: !runningWithPrebuiltApplication && argResults['build'],
     );
-    if (result != 0)
+    if (result != 0) {
       throwToolExit(null, exitCode: result);
+    }
     return FlutterCommandResult(
       ExitStatus.success,
       timingLabelParts: <String>[

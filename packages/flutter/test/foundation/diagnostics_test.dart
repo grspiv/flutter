@@ -52,7 +52,7 @@ enum ExampleEnum {
 /// Encode and decode to JSON to make sure all objects in the JSON for the
 /// [DiagnosticsNode] are valid JSON.
 Map<String, Object> simulateJsonSerialization(DiagnosticsNode node) {
-  return json.decode(json.encode(node.toJsonMap()));
+  return json.decode(json.encode(node.toJsonMap(const DiagnosticsSerializationDelegate())));
 }
 
 void validateNodeJsonSerialization(DiagnosticsNode node) {
@@ -118,6 +118,21 @@ void validateObjectFlagPropertyJsonSerialization(ObjectFlagProperty<Object> prop
     expect(json['ifPresent'], equals(property.ifPresent));
   } else {
     expect(json.containsKey('ifPresent'), isFalse);
+  }
+
+  validatePropertyJsonSerializationHelper(json, property);
+}
+
+void validateIterableFlagsPropertyJsonSerialization(FlagsSummary<Object> property) {
+  final Map<String, Object> json = simulateJsonSerialization(property);
+  if (property.value.isNotEmpty) {
+    expect(json['values'], equals(
+      property.value.entries
+        .where((MapEntry<String, Object> entry) => entry.value != null)
+        .map((MapEntry<String, Object> entry) => entry.key).toList(),
+    ));
+  } else {
+    expect(json.containsKey('values'), isFalse);
   }
 
   validatePropertyJsonSerializationHelper(json, property);
@@ -1601,6 +1616,88 @@ void main() {
     validateObjectFlagPropertyJsonSerialization(missing);
   });
 
+  test('iterable flags property test', () {
+    // Normal property
+    {
+      final Function onClick = () { };
+      final Function onMove = () { };
+      final Map<String, Function> value = <String, Function>{
+        'click': onClick,
+        'move': onMove,
+      };
+      final FlagsSummary<Function> flags = FlagsSummary<Function>(
+        'listeners',
+        value,
+      );
+      expect(flags.name, equals('listeners'));
+      expect(flags.value, equals(value));
+      expect(flags.isFiltered(DiagnosticLevel.info), isFalse);
+      expect(flags.toString(), equals('listeners: click, move'));
+      validateIterableFlagsPropertyJsonSerialization(flags);
+    }
+
+    // Reversed-order property
+    {
+      final Function onClick = () { };
+      final Function onMove = () { };
+      final Map<String, Function> value = <String, Function>{
+        'move': onMove,
+        'click': onClick,
+      };
+      final FlagsSummary<Function> flags = FlagsSummary<Function>(
+        'listeners',
+        value,
+      );
+      expect(flags.toString(), equals('listeners: move, click'));
+      expect(flags.isFiltered(DiagnosticLevel.info), isFalse);
+      validateIterableFlagsPropertyJsonSerialization(flags);
+    }
+
+    // Partially empty property
+    {
+      final Function onClick = () { };
+      final Map<String, Function> value = <String, Function>{
+        'move': null,
+        'click': onClick,
+      };
+      final FlagsSummary<Function> flags = FlagsSummary<Function>(
+        'listeners',
+        value,
+      );
+      expect(flags.toString(), equals('listeners: click'));
+      expect(flags.isFiltered(DiagnosticLevel.info), isFalse);
+      validateIterableFlagsPropertyJsonSerialization(flags);
+    }
+
+    // Empty property (without ifEmpty)
+    {
+      final Map<String, Function> value = <String, Function>{
+        'enter': null,
+      };
+      final FlagsSummary<Function> flags = FlagsSummary<Function>(
+        'listeners',
+        value,
+      );
+      expect(flags.isFiltered(DiagnosticLevel.info), isTrue);
+      validateIterableFlagsPropertyJsonSerialization(flags);
+    }
+
+    // Empty property (without ifEmpty)
+    {
+      final Map<String, Function> value = <String, Function>{
+        'enter': null,
+      };
+      final FlagsSummary<Function> flags = FlagsSummary<Function>(
+        'listeners',
+        value,
+        ifEmpty: '<none>',
+      );
+      expect(flags.toString(), equals('listeners: <none>'));
+      expect(flags.isFiltered(DiagnosticLevel.info), isFalse);
+      validateIterableFlagsPropertyJsonSerialization(flags);
+    }
+  });
+
   test('iterable property test', () {
     final List<int> ints = <int>[1,2,3];
     final IterableProperty<int> intsProperty = IterableProperty<int>(
@@ -1610,6 +1707,15 @@ void main() {
     expect(intsProperty.value, equals(ints));
     expect(intsProperty.isFiltered(DiagnosticLevel.info), isFalse);
     expect(intsProperty.toString(), equals('ints: 1, 2, 3'));
+
+    final List<double> doubles = <double>[1,2,3];
+    final IterableProperty<double> doublesProperty = IterableProperty<double>(
+      'doubles',
+      doubles,
+    );
+    expect(doublesProperty.value, equals(doubles));
+    expect(doublesProperty.isFiltered(DiagnosticLevel.info), isFalse);
+    expect(doublesProperty.toString(), equals('doubles: 1.0, 2.0, 3.0'));
 
     final IterableProperty<Object> emptyProperty = IterableProperty<Object>(
       'name',
@@ -2097,5 +2203,42 @@ void main() {
           '════════════════════════════════════════\n'
         )
     );
+  });
+
+  test('DiagnosticsProperty for basic types has value in json', () {
+    DiagnosticsProperty<int> intProperty = DiagnosticsProperty<int>('int1', 10);
+    Map<String, Object> json = simulateJsonSerialization(intProperty);
+    expect(json['name'], 'int1');
+    expect(json['value'], 10);
+
+    intProperty = IntProperty('int2', 20);
+    json = simulateJsonSerialization(intProperty);
+    expect(json['name'], 'int2');
+    expect(json['value'], 20);
+
+    DiagnosticsProperty<double> doubleProperty = DiagnosticsProperty<double>('double', 33.3);
+    json = simulateJsonSerialization(doubleProperty);
+    expect(json['name'], 'double');
+    expect(json['value'], 33.3);
+
+    doubleProperty = DoubleProperty('double2', 33.3);
+    json = simulateJsonSerialization(doubleProperty);
+    expect(json['name'], 'double2');
+    expect(json['value'], 33.3);
+
+    final DiagnosticsProperty<bool> boolProperty = DiagnosticsProperty<bool>('bool', true);
+    json = simulateJsonSerialization(boolProperty);
+    expect(json['name'], 'bool');
+    expect(json['value'], true);
+
+    DiagnosticsProperty<String> stringProperty = DiagnosticsProperty<String>('string1', 'hello');
+    json = simulateJsonSerialization(stringProperty);
+    expect(json['name'], 'string1');
+    expect(json['value'], 'hello');
+
+    stringProperty = StringProperty('string2', 'world');
+    json = simulateJsonSerialization(stringProperty);
+    expect(json['name'], 'string2');
+    expect(json['value'], 'world');
   });
 }

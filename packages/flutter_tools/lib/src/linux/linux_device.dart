@@ -19,7 +19,12 @@ import 'linux_workflow.dart';
 
 /// A device that represents a desktop Linux target.
 class LinuxDevice extends Device {
-  LinuxDevice() : super('Linux');
+  LinuxDevice() : super(
+      'Linux',
+      category: Category.desktop,
+      platformType: PlatformType.linux,
+      ephemeral: false,
+  );
 
   @override
   void clearLogs() { }
@@ -49,6 +54,9 @@ class LinuxDevice extends Device {
   Future<bool> get isLocalEmulator async => false;
 
   @override
+  Future<String> get emulatorId async => null;
+
+  @override
   bool isSupported() => true;
 
   @override
@@ -68,12 +76,15 @@ class LinuxDevice extends Device {
     DebuggingOptions debuggingOptions,
     Map<String, dynamic> platformArgs,
     bool prebuiltApplication = false,
-    bool usesTerminalUi = true,
     bool ipv6 = false,
   }) async {
     _lastBuiltMode = debuggingOptions.buildInfo.mode;
     if (!prebuiltApplication) {
-      await buildLinux(FlutterProject.current().linux, debuggingOptions.buildInfo);
+      await buildLinux(
+        FlutterProject.current().linux,
+        debuggingOptions.buildInfo,
+        target: mainPath,
+      );
     }
     await stopApp(package);
     final Process process = await processManager.start(<String>[
