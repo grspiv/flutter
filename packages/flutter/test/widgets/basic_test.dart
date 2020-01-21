@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,7 @@ void main() {
           elevation: 2.0,
           color: Color(0xFF0000FF),
           shadowColor: Color(0xFF00FF00),
-        )
+        ),
       );
       final RenderPhysicalShape renderObject = tester.renderObject(find.byType(PhysicalShape));
       expect(renderObject.clipper, const ShapeBorderClipper(shape: CircleBorder()));
@@ -34,7 +34,7 @@ void main() {
           color: const Color(0xFF0000FF),
           shadowColor: const Color(0xFF00FF00),
           child: Container(color: const Color(0xFF0000FF)),
-        )
+        ),
       );
 
       final RenderPhysicalShape renderPhysicalShape =
@@ -79,7 +79,7 @@ void main() {
               ),
             ),
           ),
-        )
+        ),
       );
       expect(_pointerDown, isFalse);
       await tester.tap(find.byKey(key1));
@@ -109,7 +109,7 @@ void main() {
               ),
             ),
           ),
-        )
+        ),
       );
       expect(_pointerDown, isFalse);
       await tester.tap(find.byKey(key1));
@@ -139,11 +139,74 @@ void main() {
               ),
             ),
           ),
-        )
+        ),
       );
       expect(_pointerDown, isFalse);
       await tester.tap(find.byKey(key1));
       expect(_pointerDown, isTrue);
+    });
+
+    testWidgets('semantics bounds are updated', (WidgetTester tester) async {
+      final GlobalKey fractionalTranslationKey = GlobalKey();
+      final GlobalKey textKey = GlobalKey();
+      Offset offset = const Offset(0.4, 0.4);
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return Directionality(
+              textDirection: TextDirection.ltr,
+              child: Center(
+                child: Semantics(
+                  explicitChildNodes: true,
+                  child: FractionalTranslation(
+                    key: fractionalTranslationKey,
+                    translation: offset,
+                    transformHitTests: true,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          offset = const Offset(0.8, 0.8);
+                        });
+                      },
+                      child: SizedBox(
+                        width: 100.0,
+                        height: 100.0,
+                        child: Text(
+                          'foo',
+                          key: textKey,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        )
+      );
+
+      expect(
+        tester.getSemantics(find.byKey(textKey)).transform,
+        Matrix4(
+          3.0, 0.0, 0.0, 0.0,
+          0.0, 3.0, 0.0, 0.0,
+          0.0, 0.0, 1.0, 0.0,
+          1170.0, 870.0, 0.0, 1.0,
+        ),
+      );
+
+      await tester.tap(find.byKey(fractionalTranslationKey));
+      await tester.pump();
+      expect(
+        tester.getSemantics(find.byKey(textKey)).transform,
+        Matrix4(
+          3.0, 0.0, 0.0, 0.0,
+          0.0, 3.0, 0.0, 0.0,
+          0.0, 0.0, 1.0, 0.0,
+          1290.0, 990.0, 0.0, 1.0,
+        ),
+      );
     });
   });
 
@@ -168,7 +231,7 @@ void main() {
                   ),
                   Text('one\ntwo\nthree\nfour\nfive\nsix\nseven',
                     key: key2,
-                    style: const TextStyle(fontSize: fontSize2)
+                    style: const TextStyle(fontSize: fontSize2),
                   ),
                 ],
               ),
@@ -230,7 +293,7 @@ class HitsRenderBox extends Matcher {
 
   @override
   bool matches(dynamic item, Map<dynamic, dynamic> matchState) {
-    final HitTestResult hitTestResult = item;
+    final HitTestResult hitTestResult = item as HitTestResult;
     return hitTestResult.path.where(
       (HitTestEntry entry) => entry.target == renderBox
     ).isNotEmpty;
@@ -250,7 +313,7 @@ class DoesNotHitRenderBox extends Matcher {
 
   @override
   bool matches(dynamic item, Map<dynamic, dynamic> matchState) {
-    final HitTestResult hitTestResult = item;
+    final HitTestResult hitTestResult = item as HitTestResult;
     return hitTestResult.path.where(
       (HitTestEntry entry) => entry.target == renderBox
     ).isEmpty;

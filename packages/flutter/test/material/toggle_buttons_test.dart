@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -307,6 +307,98 @@ void main() {
     expect(textStyle.textBaseline, TextBaseline.ideographic);
     expect(textStyle.fontSize, 20.0);
     expect(textStyle.color, isNot(Colors.orange));
+  });
+
+  testWidgets('Default BoxConstraints', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      Material(
+        child: boilerplate(
+          child: ToggleButtons(
+            isSelected: const <bool>[false, false, false],
+            onPressed: (int index) {},
+            children: const <Widget>[
+              Icon(Icons.check),
+              Icon(Icons.access_alarm),
+              Icon(Icons.cake),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final Rect firstRect = tester.getRect(find.byType(RawMaterialButton).at(0));
+    expect(firstRect.width, 48.0);
+    expect(firstRect.height, 48.0);
+    final Rect secondRect = tester.getRect(find.byType(RawMaterialButton).at(1));
+    expect(secondRect.width, 48.0);
+    expect(secondRect.height, 48.0);
+    final Rect thirdRect = tester.getRect(find.byType(RawMaterialButton).at(2));
+    expect(thirdRect.width, 48.0);
+    expect(thirdRect.height, 48.0);
+  });
+
+  testWidgets('Custom BoxConstraints', (WidgetTester tester) async {
+    // Test for minimum constraints
+    await tester.pumpWidget(
+      Material(
+        child: boilerplate(
+          child: ToggleButtons(
+            constraints: const BoxConstraints(
+              minWidth: 50.0,
+              minHeight: 60.0,
+            ),
+            isSelected: const <bool>[false, false, false],
+            onPressed: (int index) {},
+            children: const <Widget>[
+              Icon(Icons.check),
+              Icon(Icons.access_alarm),
+              Icon(Icons.cake),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    Rect firstRect = tester.getRect(find.byType(RawMaterialButton).at(0));
+    expect(firstRect.width, 50.0);
+    expect(firstRect.height, 60.0);
+    Rect secondRect = tester.getRect(find.byType(RawMaterialButton).at(1));
+    expect(secondRect.width, 50.0);
+    expect(secondRect.height, 60.0);
+    Rect thirdRect = tester.getRect(find.byType(RawMaterialButton).at(2));
+    expect(thirdRect.width, 50.0);
+    expect(thirdRect.height, 60.0);
+
+    // Test for maximum constraints
+    await tester.pumpWidget(
+      Material(
+        child: boilerplate(
+          child: ToggleButtons(
+            constraints: const BoxConstraints(
+              maxWidth: 20.0,
+              maxHeight: 10.0,
+            ),
+            isSelected: const <bool>[false, false, false],
+            onPressed: (int index) {},
+            children: const <Widget>[
+              Icon(Icons.check),
+              Icon(Icons.access_alarm),
+              Icon(Icons.cake),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    firstRect = tester.getRect(find.byType(RawMaterialButton).at(0));
+    expect(firstRect.width, 20.0);
+    expect(firstRect.height, 10.0);
+    secondRect = tester.getRect(find.byType(RawMaterialButton).at(1));
+    expect(secondRect.width, 20.0);
+    expect(secondRect.height, 10.0);
+    thirdRect = tester.getRect(find.byType(RawMaterialButton).at(2));
+    expect(thirdRect.width, 20.0);
+    expect(thirdRect.height, 10.0);
   });
 
   testWidgets(
@@ -781,7 +873,7 @@ void main() {
     expect(
       inkFeatures,
       paints
-        ..circle(color: splashColor)
+        ..circle(color: splashColor),
     );
 
     await touchGesture.up();
